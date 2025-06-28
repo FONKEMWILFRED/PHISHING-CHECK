@@ -75,11 +75,11 @@ export default function ResultsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#3498db', padding: 20, alignItems: 'center' },
+  container: { flex: 1, backgroundColor: 'black' },
+  header: { backgroundColor: '#3498db', padding: 20, alignItems: 'center', marginTop: 35 },
   headerText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   contentContainer: { padding: 20 },
-  scanType: { fontSize: 16, color: '#7f8c8d', marginBottom: 15, textAlign: 'center' },
+  scanType: { fontSize: 16, color: 'white', marginBottom: 15, textAlign: 'center' },
   contentBox: {
     backgroundColor: '#fff',
     borderRadius: 10,

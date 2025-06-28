@@ -130,7 +130,10 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>PhishGuard</Text>
+      <View style={{ alignItems: 'center', marginTop: 50 }}>
+        <Icon name="security" size={64} color="#3498db" />
+      <Text style={styles.title}>PHISHGUARD</Text>
+      </View>
 
       <View style={styles.tabContainer}>
         {['url', 'email', 'file'].map((tab) => (
@@ -192,16 +195,16 @@ export default function ScanScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/HistoryScreen')}>
-        <Text style={styles.historyButtonText}>View Scan History</Text>
+        <Text style={styles.historyButtonText}>Scan History</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f5f5f5' },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#2c3e50', textAlign: 'center', marginTop: 20 },
-  tabContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  container: { flex: 1, padding: 20, backgroundColor: 'black' },
+  title: { fontSize: 28, fontWeight: 'bold', color: 'white', textAlign: 'center', marginTop: 10 },
+  tabContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 50, paddingHorizontal: 20, marginTop: 30 },
   tab: { flex: 1, alignItems: 'center', padding: 15, borderRadius: 10, backgroundColor: '#ecf0f1', marginHorizontal: 5 },
   activeTab: { backgroundColor: '#3498db' },
   tabText: { marginTop: 5, color: '#555', fontWeight: '500' },
