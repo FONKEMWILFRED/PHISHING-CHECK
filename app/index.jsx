@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Alert, StyleSheet } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker'; // ✅ Correct import for Expo
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
+import { VIRUSTOTAL_API_KEY } from '../config';
 
-export default function ScanScreen({ navigation }) {
+export default function ScanScreen() {
   const [activeTab, setActiveTab] = useState(null);
   const [url, setUrl] = useState('');
   const [email, setEmail] = useState('');
@@ -13,13 +16,25 @@ export default function ScanScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Save scan result to AsyncStorage history
+  const saveToHistory = async (item) => {
+    try {
+      const existing = await AsyncStorage.getItem('scan_history');
+      const history = existing ? JSON.parse(existing) : [];
+      history.unshift(item); // Add new scan at start
+      await AsyncStorage.setItem('scan_history', JSON.stringify(history));
+    } catch (err) {
+      console.warn('Failed to save scan history:', err);
+    }
+  };
+
   const handleScan = async () => {
     if (!activeTab) {
       Alert.alert('Error', 'Select a scan type first');
       return;
     }
-    setLoading(true);
 
+    setLoading(true);
     try {
       let response;
       const formData = new FormData();
@@ -27,18 +42,31 @@ export default function ScanScreen({ navigation }) {
       if (activeTab === 'url') {
         if (!url.trim()) throw new Error('Enter a URL');
         const form = new URLSearchParams();
-        form.append('url', url);
-        console.log("fetching...");
-        response = await axios.post('https://www.virustotal.com/api/v3/urls', {
-          form,
+        form.append('url', url.trim());
+
+        response = await axios.post('https://www.virustotal.com/api/v3/urls', form.toString(), {
           headers: {
-            "Content-Type": "application/json",
-            "x-apikey": process.env.API_VIRUS_TOTAL_KEY
-          }
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'x-apikey': VIRUSTOTAL_API_KEY,
+          },
         });
       } else if (activeTab === 'email') {
         if (!email.trim()) throw new Error('Enter email content');
-        response = await axios.post('http://192.168.94.35:5000/api/scan/email', { email });
+        const path = FileSystem.cacheDirectory + 'email.txt';
+        await FileSystem.writeAsStringAsync(path, email, { encoding: FileSystem.EncodingType.UTF8 });
+
+        formData.append('file', {
+          uri: path,
+          type: 'text/plain',
+          name: 'email.txt',
+        });
+
+        response = await axios.post('https://www.virustotal.com/api/v3/files', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'x-apikey': VIRUSTOTAL_API_KEY,
+          },
+        });
       } else if (activeTab === 'file') {
         if (!file) throw new Error('Select a file');
         formData.append('file', {
@@ -46,18 +74,44 @@ export default function ScanScreen({ navigation }) {
           type: file.mimeType || 'application/octet-stream',
           name: file.name,
         });
-        response = await axios.post('http://192.168.94.35:5000/api/scan/file', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+
+        response = await axios.post('https://www.virustotal.com/api/v3/files', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'x-apikey': VIRUSTOTAL_API_KEY,
+          },
         });
       }
-      console.log("response: ", response);
-      navigation.navigate('Results', {
-        scanResult: response.data,
+
+      const stats = response.data.data?.attributes?.last_analysis_stats || {};
+      let verdict = 'safe';
+      if (stats.malicious > 0) verdict = 'malicious';
+      else if (stats.suspicious > 0) verdict = 'suspicious';
+
+      const resultObject = {
+        verdict,
+        malicious: stats.malicious || 0,
+        suspicious: stats.suspicious || 0,
+        harmless: stats.harmless || 0,
+        undetected: stats.undetected || 0,
+      };
+
+      await saveToHistory({
         scanType: activeTab,
         content: activeTab === 'url' ? url : activeTab === 'email' ? email : file.name,
+        ...resultObject,
+      });
+
+      router.push({
+        pathname: '/ResultsScreen',
+        params: {
+          scanType: activeTab,
+          content: activeTab === 'url' ? url : activeTab === 'email' ? email : file.name,
+          scanResult: JSON.stringify(resultObject),
+        },
       });
     } catch (error) {
-      Alert.alert('Error', error.message || 'Scan failed');
+      Alert.alert('Error', error?.response?.data?.error?.message || error.message || 'Scan failed');
     } finally {
       setLoading(false);
     }
@@ -65,10 +119,9 @@ export default function ScanScreen({ navigation }) {
 
   const pickFile = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
-
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (result?.assets && result.assets.length > 0) {
-        setFile(result.assets[0]); // ✅ Expo v50+ uses result.assets
+        setFile(result.assets[0]);
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to pick file');
@@ -78,6 +131,7 @@ export default function ScanScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>PhishGuard</Text>
+
       <View style={styles.tabContainer}>
         {['url', 'email', 'file'].map((tab) => (
           <TouchableOpacity
@@ -91,16 +145,11 @@ export default function ScanScreen({ navigation }) {
             }}
           >
             <Icon
-              name={
-                tab === 'url' ? 'link' :
-                  tab === 'email' ? 'email' : 'insert-drive-file'
-              }
+              name={tab === 'url' ? 'link' : tab === 'email' ? 'email' : 'insert-drive-file'}
               size={24}
               color={activeTab === tab ? '#fff' : '#555'}
             />
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab.toUpperCase()}
-            </Text>
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab.toUpperCase()}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -130,9 +179,7 @@ export default function ScanScreen({ navigation }) {
       {activeTab === 'file' && (
         <TouchableOpacity style={styles.fileButton} onPress={pickFile}>
           <Icon name="cloud-upload" size={32} color="#555" />
-          <Text style={styles.fileButtonText}>
-            {file ? file.name : 'Select file to scan'}
-          </Text>
+          <Text style={styles.fileButtonText}>{file ? file.name : 'Select file to scan'}</Text>
         </TouchableOpacity>
       )}
 
@@ -144,10 +191,7 @@ export default function ScanScreen({ navigation }) {
         <Text style={styles.scanButtonText}>{loading ? 'Scanning...' : 'Scan Now'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.historyButton}
-        onPress={() => router.push('./HistoryScreen')}
-      >
+      <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/HistoryScreen')}>
         <Text style={styles.historyButtonText}>View Scan History</Text>
       </TouchableOpacity>
     </View>

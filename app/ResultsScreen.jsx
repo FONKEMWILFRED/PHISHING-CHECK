@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useLocalSearchParams } from 'expo-router';
 
-export default function ResultsScreen({ route }) {
-  const { scanResult, scanType, content } = route.params;
+export default function ResultsScreen() {
+  const { scanResult, scanType, content } = useLocalSearchParams();
+  const parsedResult = typeof scanResult === 'string' ? JSON.parse(scanResult) : scanResult;
 
   const getVerdictColor = () => {
-    switch (scanResult.verdict) {
+    switch (parsedResult.verdict) {
       case 'malicious': return '#e74c3c';
       case 'suspicious': return '#f39c12';
       case 'safe': return '#2ecc71';
@@ -15,7 +17,7 @@ export default function ResultsScreen({ route }) {
   };
 
   const getVerdictIcon = () => {
-    switch (scanResult.verdict) {
+    switch (parsedResult.verdict) {
       case 'malicious': return 'dangerous';
       case 'suspicious': return 'warning';
       case 'safe': return 'check-circle';
@@ -34,40 +36,36 @@ export default function ResultsScreen({ route }) {
 
         <View style={styles.contentBox}>
           <Text style={styles.contentLabel}>Scanned Content:</Text>
-          <Text style={styles.contentText}>
-            {content || 'N/A'}
-          </Text>
+          <Text style={styles.contentText}>{content || 'N/A'}</Text>
         </View>
 
         <View style={[styles.verdictContainer, { backgroundColor: getVerdictColor() }]}>
           <Icon name={getVerdictIcon()} size={30} color="#fff" />
-          <Text style={styles.verdictText}>
-            {scanResult.verdict?.toUpperCase() || 'UNKNOWN'}
-          </Text>
+          <Text style={styles.verdictText}>{parsedResult.verdict?.toUpperCase() || 'UNKNOWN'}</Text>
         </View>
 
         <View style={styles.statsContainer}>
           <View style={styles.statRow}>
             <View style={[styles.statBadge, { backgroundColor: '#e74c3c' }]}>
               <Text style={styles.statBadgeText}>Malicious</Text>
-              <Text style={styles.statBadgeCount}>{scanResult.malicious ?? 0}</Text>
+              <Text style={styles.statBadgeCount}>{parsedResult.malicious ?? 0}</Text>
             </View>
 
             <View style={[styles.statBadge, { backgroundColor: '#f39c12' }]}>
               <Text style={styles.statBadgeText}>Suspicious</Text>
-              <Text style={styles.statBadgeCount}>{scanResult.suspicious ?? 0}</Text>
+              <Text style={styles.statBadgeCount}>{parsedResult.suspicious ?? 0}</Text>
             </View>
           </View>
 
           <View style={styles.statRow}>
             <View style={[styles.statBadge, { backgroundColor: '#2ecc71' }]}>
               <Text style={styles.statBadgeText}>Harmless</Text>
-              <Text style={styles.statBadgeCount}>{scanResult.harmless ?? 0}</Text>
+              <Text style={styles.statBadgeCount}>{parsedResult.harmless ?? 0}</Text>
             </View>
 
             <View style={[styles.statBadge, { backgroundColor: '#95a5a6' }]}>
               <Text style={styles.statBadgeText}>Undetected</Text>
-              <Text style={styles.statBadgeCount}>{scanResult.undetected ?? 0}</Text>
+              <Text style={styles.statBadgeCount}>{parsedResult.undetected ?? 0}</Text>
             </View>
           </View>
         </View>

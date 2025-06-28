@@ -1,110 +1,107 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import axios from 'axios';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
-export default function HistoryScreen({ navigation }) {
+export default function HistoryScreen() {
   const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchHistory = async () => {
-    try {
-      const res = await axios.get('http://192.168.0.146:5000/api/history');
-      setHistory(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const router = useRouter();
 
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('scan_history');
+        if (stored) {
+          setHistory(JSON.parse(stored));
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to load scan history');
+      }
+    };
     fetchHistory();
   }, []);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchHistory();
-  }, []);
-
-  const getVerdictColor = (verdict) => {
-    switch (verdict) {
-      case 'malicious': return '#e74c3c';
-      case 'suspicious': return '#f39c12';
-      case 'safe': return '#2ecc71';
-      default: return '#95a5a6';
-    }
+  const deleteEntry = async (index) => {
+    Alert.alert(
+      'Delete Scan',
+      'Are you sure you want to delete this scan?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const updated = [...history];
+            updated.splice(index, 1);
+            setHistory(updated);
+            await AsyncStorage.setItem('scan_history', JSON.stringify(updated));
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.item}
-      onPress={() => navigation.navigate('Results', { 
-        scanResult: { 
-          malicious: item.result.malicious,
-          suspicious: item.result.suspicious,
-          harmless: item.result.harmless,
-          undetected: item.result.undetected,
-          verdict: item.verdict
-        },
-        scanType: item.type,
-        content: item.content 
-      })}
-    >
-      <View style={styles.itemHeader}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Icon
-            name={
-              item.type === 'url' ? 'link' :
-              item.type === 'email' ? 'email' :
-              'insert-drive-file'
-            }
-            size={18}
-            color="#2c3e50"
-            style={{ marginRight: 6 }}
-          />
-          <Text style={styles.itemType}>{item.type.toUpperCase()}</Text>
-        </View>
-        <View style={[styles.verdictBadge, { backgroundColor: getVerdictColor(item.verdict) }]}>
-          <Text style={styles.verdictBadgeText}>{item.verdict.toUpperCase()}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.itemContent} numberOfLines={1} ellipsizeMode="tail">
+  const renderItem = ({ item, index }) => (
+    <View style={styles.item}>
+      <Text style={styles.type}>{item.scanType.toUpperCase()}</Text>
+      <Text style={styles.content} numberOfLines={2}>
         {item.content}
       </Text>
-      <Text style={styles.itemDate}>
-        {new Date(item.timestamp).toLocaleString()}
+      <Text
+        style={[
+          styles.verdict,
+          {
+            color:
+              item.verdict === 'malicious'
+                ? '#e74c3c'
+                : item.verdict === 'suspicious'
+                ? '#f39c12'
+                : '#2ecc71',
+          },
+        ]}
+      >
+        Result: {item.verdict.toUpperCase()}
       </Text>
-    </TouchableOpacity>
+      <View style={styles.actions}>
+        <TouchableOpacity onPress={() => deleteEntry(index)}>
+          <Text style={[styles.btn, { color: '#e74c3c' }]}>Delete</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() =>
+            router.push({
+              pathname: './ResultsScreen',
+              params: {
+                scanType: item.scanType,
+                content: item.content,
+                scanResult: JSON.stringify({
+                  verdict: item.verdict,
+                  malicious: item.malicious,
+                  suspicious: item.suspicious,
+                  harmless: item.harmless,
+                  undetected: item.undetected,
+                }),
+              },
+            })
+          }
+        >
+          <Text style={[styles.btn, { color: '#2980b9' }]}>View</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerText}>Scan History</Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text>Loading history...</Text>
-        </View>
-      ) : history.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="history" size={50} color="#95a5a6" />
-          <Text style={styles.emptyText}>No scan history found</Text>
-        </View>
+      <Text style={styles.title}>Scan History</Text>
+      {history.length === 0 ? (
+        <Text style={{ textAlign: 'center', marginTop: 20 }}>No scans yet.</Text>
       ) : (
         <FlatList
           data={history}
           renderItem={renderItem}
-          keyExtractor={item => item._id}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+          keyExtractor={(_, index) => index.toString()}
+          contentContainerStyle={{ paddingBottom: 20 }}
         />
       )}
     </View>
@@ -112,18 +109,20 @@ export default function HistoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#3498db', padding: 20, alignItems: 'center' },
-  headerText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { marginTop: 10, color: '#95a5a6', fontSize: 18 },
-  listContainer: { padding: 15 },
-  item: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: '#ddd' },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  itemType: { fontWeight: 'bold', color: '#2c3e50', fontSize: 15 },
-  verdictBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  verdictBadgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  itemContent: { color: '#555', marginBottom: 5 },
-  itemDate: { fontSize: 12, color: '#95a5a6' },
+  container: { flex: 1, padding: 20, backgroundColor: '#f5f5f5' },
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
+  item: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    elevation: 1,
+  },
+  type: { fontWeight: 'bold', fontSize: 16, marginBottom: 4, color: '#34495e' },
+  content: { fontSize: 14, color: '#7f8c8d', marginBottom: 6 },
+  verdict: { fontWeight: 'bold', fontSize: 15 },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  btn: { fontWeight: 'bold', fontSize: 16 },
 });
